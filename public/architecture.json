@@ -1,0 +1,92 @@
+{
+  "title": "Platform Architecture",
+  "subtitle": "Request flow across microservices",
+  "nodes": [
+    {
+      "id": "api-gateway",
+      "label": "API Gateway",
+      "type": "service",
+      "description": "Entry point for all incoming requests. Routes traffic to downstream services."
+    },
+    {
+      "id": "auth-service",
+      "label": "Auth Service",
+      "type": "service",
+      "description": "Handles JWT validation, token refresh, and user authentication."
+    },
+    {
+      "id": "user-service",
+      "label": "User Service",
+      "type": "service",
+      "description": "Manages user profiles, preferences, and account operations."
+    },
+    {
+      "id": "order-service",
+      "label": "Order Service",
+      "type": "service",
+      "description": "Processes orders, inventory checks, and fulfillment workflows."
+    },
+    {
+      "id": "postgres",
+      "label": "PostgreSQL",
+      "type": "database",
+      "description": "Primary relational database for transactional data."
+    },
+    {
+      "id": "redis",
+      "label": "Redis Cache",
+      "type": "queue",
+      "description": "In-memory cache and session store for high-throughput reads."
+    },
+    {
+      "id": "message-queue",
+      "label": "Message Queue",
+      "type": "queue",
+      "description": "Async event bus for order processing and notifications."
+    }
+  ],
+  "edges": [
+    {
+      "source": "api-gateway",
+      "target": "auth-service",
+      "label": "JWT validation",
+      "flowDirection": "bidirectional"
+    },
+    {
+      "source": "api-gateway",
+      "target": "user-service",
+      "label": "User CRUD",
+      "flowDirection": "bidirectional"
+    },
+    {
+      "source": "api-gateway",
+      "target": "order-service",
+      "label": "Order API",
+      "flowDirection": "bidirectional"
+    },
+    {
+      "source": "auth-service",
+      "target": "redis",
+      "label": "Session cache",
+      "flowDirection": "bidirectional"
+    },
+    {
+      "source": "user-service",
+      "target": "postgres",
+      "label": "User data",
+      "flowDirection": "bidirectional"
+    },
+    {
+      "source": "order-service",
+      "target": "postgres",
+      "label": "Order persistence",
+      "flowDirection": "bidirectional"
+    },
+    {
+      "source": "order-service",
+      "target": "message-queue",
+      "label": "Order events",
+      "flowDirection": "unidirectional"
+    }
+  ]
+}
