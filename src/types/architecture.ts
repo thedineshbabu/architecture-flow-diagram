@@ -1,6 +1,6 @@
 import type { Node } from '@xyflow/react';
 
-export type NodeType = 'service' | 'database' | 'queue';
+export type NodeType = 'ui' | 'service' | 'database' | 'queue';
 
 export type FlowDirection = 'unidirectional' | 'bidirectional';
 
@@ -16,6 +16,7 @@ export interface ArchitectureEdge {
   target: string;
   label?: string;
   flowDirection?: FlowDirection;
+  sequence?: number;
 }
 
 export interface ArchitectureConfig {

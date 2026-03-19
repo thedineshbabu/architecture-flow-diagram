@@ -5,6 +5,17 @@ interface EditToolbarProps {
   onAddEdge: () => void;
   onSave: () => void;
   onDownload: () => void;
+  onExportPng?: () => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onToggleFullscreen?: () => void;
+  onToggleFlow?: () => void;
+  onToggleLabels?: () => void;
+  isFullscreen?: boolean;
+  isFlowActive?: boolean;
+  showLabels?: boolean;
   isSaving?: boolean;
   saveError: string | null;
 }
@@ -14,9 +25,23 @@ export function EditToolbar({
   onAddEdge,
   onSave,
   onDownload,
+  onExportPng,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  onToggleFullscreen,
+  onToggleFlow,
+  onToggleLabels,
+  isFullscreen = false,
+  isFlowActive = false,
+  showLabels = false,
   isSaving = false,
   saveError,
 }: EditToolbarProps) {
+  const btnClass = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 backdrop-blur-md border border-slate-600 hover:border-slate-500 text-slate-200 text-sm font-medium transition-colors';
+  const btnDisabled = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 backdrop-blur-md border border-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed';
+
   return (
     <motion.div
       className="absolute top-4 right-4 z-10 flex flex-wrap gap-2"
@@ -24,6 +49,35 @@ export function EditToolbar({
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3, delay: 0.15 }}
     >
+      {/* Undo/Redo */}
+      {onUndo && (
+        <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          className={canUndo ? btnClass : btnDisabled}
+          title="Undo (Ctrl+Z)"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+          </svg>
+        </button>
+      )}
+      {onRedo && (
+        <button
+          onClick={onRedo}
+          disabled={!canRedo}
+          className={canRedo ? btnClass : btnDisabled}
+          title="Redo (Ctrl+Shift+Z)"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" />
+          </svg>
+        </button>
+      )}
+
+      {/* Divider */}
+      {onUndo && <div className="w-px h-8 bg-slate-600/40 self-center" />}
+
       <button
         onClick={onAddNode}
         className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 backdrop-blur-md border border-slate-600 hover:border-accent-cyan/50 text-slate-200 text-sm font-medium transition-colors"
@@ -60,19 +114,87 @@ export function EditToolbar({
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
             </svg>
-            Save to JSON
+            Save
           </>
         )}
       </button>
       <button
         onClick={onDownload}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 backdrop-blur-md border border-slate-600 hover:border-slate-500 text-slate-200 text-sm font-medium transition-colors"
+        className={btnClass}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
         Download
       </button>
+      {onExportPng && (
+        <button
+          onClick={onExportPng}
+          className={btnClass}
+          title="Export as PNG"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+          </svg>
+          PNG
+        </button>
+      )}
+
+      {/* Divider */}
+      <div className="w-px h-8 bg-slate-600/40 self-center" />
+
+      {/* Show Labels toggle */}
+      {onToggleLabels && (
+        <button
+          onClick={onToggleLabels}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-md border text-sm font-medium transition-colors ${
+            showLabels
+              ? 'bg-accent-cyan/20 border-accent-cyan/60 text-accent-cyan'
+              : 'bg-slate-800/90 border-slate-600 hover:border-slate-500 text-slate-200'
+          }`}
+          title={showLabels ? 'Hide edge labels' : 'Show all edge labels'}
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+          </svg>
+          Labels
+        </button>
+      )}
+
+      {onToggleFlow && (
+        <button
+          onClick={onToggleFlow}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-md border text-sm font-medium transition-colors ${
+            isFlowActive
+              ? 'bg-accent-cyan/20 border-accent-cyan/60 text-accent-cyan'
+              : 'bg-slate-800/90 border-slate-600 hover:border-accent-cyan/50 text-slate-200'
+          }`}
+          title={isFlowActive ? 'Hide data flow' : 'Show data flow'}
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+          </svg>
+          Flow
+        </button>
+      )}
+      {onToggleFullscreen && (
+        <button
+          onClick={onToggleFullscreen}
+          className={btnClass}
+          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        >
+          {isFullscreen ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            </svg>
+          )}
+        </button>
+      )}
       {saveError && (
         <p className="w-full text-xs text-red-400 mt-1">Save failed: {saveError}. Use Download to save locally.</p>
       )}

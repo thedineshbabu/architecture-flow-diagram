@@ -1,32 +1,14 @@
 declare module 'dagre' {
-  interface GraphLabel {
-    rankdir?: string;
-    nodesep?: number;
-    ranksep?: number;
-  }
-
-  interface NodeConfig {
-    width?: number;
-    height?: number;
-    x?: number;
-    y?: number;
-  }
+  export const graphlib: {
+    Graph: new () => Graph;
+  };
+  export function layout(graph: Graph): void;
 
   interface Graph {
-    setGraph(label: GraphLabel): Graph;
-    setDefaultEdgeLabel(cb: () => object): Graph;
-    setNode(name: string, config: NodeConfig): void;
+    setDefaultEdgeLabel(fn: () => Record<string, unknown>): Graph;
+    setGraph(opts: Record<string, unknown>): void;
+    setNode(id: string, opts: { width: number; height: number }): void;
     setEdge(source: string, target: string): void;
-    node(name: string): NodeConfig | undefined;
+    node(id: string): { x: number; y: number; width: number; height: number } | undefined;
   }
-
-  interface DagreModule {
-    graphlib: {
-      Graph: new () => Graph;
-    };
-    layout(g: Graph): void;
-  }
-
-  const dagre: DagreModule;
-  export default dagre;
 }

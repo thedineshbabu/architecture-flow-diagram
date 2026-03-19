@@ -24,12 +24,8 @@ export function DeleteSelectedPanel({ onDeleteNodes, onDeleteEdges }: DeleteSele
   const hasSelection = selectedNodeIds.length > 0 || selectedEdgeIds.length > 0;
 
   const handleDelete = useCallback(() => {
-    if (selectedNodeIds.length > 0) {
-      onDeleteNodes(selectedNodeIds);
-    }
-    if (selectedEdgeIds.length > 0) {
-      onDeleteEdges(selectedEdgeIds);
-    }
+    if (selectedNodeIds.length > 0) onDeleteNodes(selectedNodeIds);
+    if (selectedEdgeIds.length > 0) onDeleteEdges(selectedEdgeIds);
   }, [selectedNodeIds, selectedEdgeIds, onDeleteNodes, onDeleteEdges]);
 
   return (
@@ -44,7 +40,7 @@ export function DeleteSelectedPanel({ onDeleteNodes, onDeleteEdges }: DeleteSele
           >
             <span className="text-sm text-slate-300">
               {selectedNodeIds.length > 0 && selectedEdgeIds.length > 0
-                ? `${selectedNodeIds.length} node(s), ${selectedEdgeIds.length} connection(s) selected`
+                ? `${selectedNodeIds.length} node(s), ${selectedEdgeIds.length} connection(s)`
                 : selectedNodeIds.length > 0
                   ? `${selectedNodeIds.length} node(s) selected`
                   : `${selectedEdgeIds.length} connection(s) selected`}
@@ -56,7 +52,7 @@ export function DeleteSelectedPanel({ onDeleteNodes, onDeleteEdges }: DeleteSele
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-              Remove selected
+              Remove
             </button>
           </motion.div>
         )}

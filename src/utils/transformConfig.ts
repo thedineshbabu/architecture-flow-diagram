@@ -26,6 +26,7 @@ export function transformConfig(config: ArchitectureConfig): {
     data: {
       label: e.label,
       flowDirection: e.flowDirection ?? 'unidirectional',
+      sequence: e.sequence,
     },
   }));
 

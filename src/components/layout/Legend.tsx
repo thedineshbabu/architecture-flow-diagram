@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 
 const LEGEND_ITEMS = [
-  { type: 'service', label: 'Service', color: 'bg-accent-cyan/80', border: 'border-accent-cyan' },
+  { type: 'ui', label: 'UI', color: 'bg-pink-400/80', border: 'border-pink-400' },
+  { type: 'service', label: 'Service', color: 'bg-emerald-400/80', border: 'border-emerald-400' },
   { type: 'database', label: 'Database', color: 'bg-emerald-400/80', border: 'border-emerald-400' },
   { type: 'queue', label: 'Queue / Cache', color: 'bg-amber-400/80', border: 'border-amber-400' },
 ] as const;

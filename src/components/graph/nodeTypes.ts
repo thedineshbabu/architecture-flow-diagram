@@ -1,10 +1,9 @@
 import type { NodeTypes } from '@xyflow/react';
-import { ServiceNode } from './ServiceNode';
-import { DatabaseNode } from './DatabaseNode';
-import { QueueNode } from './QueueNode';
+import { DatadogNode } from './DatadogNode';
 
 export const nodeTypes = {
-  service: ServiceNode,
-  database: DatabaseNode,
-  queue: QueueNode,
+  ui: DatadogNode,
+  service: DatadogNode,
+  database: DatadogNode,
+  queue: DatadogNode,
 } as NodeTypes;

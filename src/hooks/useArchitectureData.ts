@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { z } from 'zod';
-import type { ArchitectureConfig, ArchitectureNode, ArchitectureEdge } from '../types/architecture';
-import { transformConfig } from '../utils/transformConfig';
 import type { Node, Edge } from '@xyflow/react';
-import type { ArchitectureNodeData } from '../utils/transformConfig';
+import type { ArchitectureConfig, ArchitectureNode, ArchitectureEdge, ArchitectureNodeData } from '../types/architecture';
+import { transformConfig } from '../utils/transformConfig';
 
 const NodeSchema = z.object({
   id: z.string(),
   label: z.string(),
-  type: z.enum(['service', 'database', 'queue']),
+  type: z.enum(['ui', 'service', 'database', 'queue']),
   description: z.string().optional(),
 });
 
@@ -17,6 +16,7 @@ const EdgeSchema = z.object({
   target: z.string(),
   label: z.string().optional(),
   flowDirection: z.enum(['unidirectional', 'bidirectional']).optional(),
+  sequence: z.number().optional(),
 });
 
 const ConfigSchema = z.object({
@@ -25,6 +25,16 @@ const ConfigSchema = z.object({
   nodes: z.array(NodeSchema),
   edges: z.array(EdgeSchema),
 });
+
+const MAX_HISTORY = 50;
+
+export interface DiagramInfo {
+  id: string;
+  title: string;
+  subtitle?: string;
+  nodeCount: number;
+  edgeCount: number;
+}
 
 export interface UseArchitectureDataResult {
   title: string;
@@ -35,6 +45,14 @@ export interface UseArchitectureDataResult {
   isLoading: boolean;
   error: string | null;
   saveError: string | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  currentDiagramId: string;
+  diagrams: DiagramInfo[];
+  switchDiagram: (id: string) => void;
+  createDiagram: (id: string, title: string) => void;
+  duplicateDiagram: (fromId: string, newId: string, newTitle: string) => void;
+  deleteDiagram: (id: string) => void;
   refetch: () => void;
   setTitle: (title: string) => void;
   setSubtitle: (subtitle: string) => void;
@@ -42,8 +60,12 @@ export interface UseArchitectureDataResult {
   updateNode: (id: string, updates: Partial<ArchitectureNode>) => void;
   deleteNode: (id: string) => void;
   addEdge: (edge: ArchitectureEdge) => void;
+  updateEdgeByIndex: (index: number, updates: Partial<ArchitectureEdge>) => void;
+  deleteEdgeByIndex: (index: number) => void;
   deleteEdge: (source: string, target: string) => void;
   deleteEdgeById: (edgeId: string) => void;
+  undo: () => void;
+  redo: () => void;
   save: () => Promise<boolean>;
   downloadJson: () => void;
 }
@@ -55,8 +77,72 @@ export function useArchitectureData(): UseArchitectureDataResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [currentDiagramId, setCurrentDiagramId] = useState('default');
+  const [diagrams, setDiagrams] = useState<DiagramInfo[]>([]);
 
-  const fetchConfig = useCallback(async () => {
+  // Undo/redo history
+  const undoStack = useRef<ArchitectureConfig[]>([]);
+  const redoStack = useRef<ArchitectureConfig[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  const pushHistory = useCallback((prev: ArchitectureConfig | null) => {
+    if (!prev) return;
+    undoStack.current = [...undoStack.current.slice(-MAX_HISTORY + 1), prev];
+    redoStack.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, []);
+
+  // Wrap setConfig to track history
+  const setConfigWithHistory = useCallback((updater: (c: ArchitectureConfig | null) => ArchitectureConfig | null) => {
+    setConfig((prev) => {
+      const next = updater(prev);
+      if (next && prev && JSON.stringify(next) !== JSON.stringify(prev)) {
+        pushHistory(prev);
+      }
+      return next;
+    });
+  }, [pushHistory]);
+
+  const undo = useCallback(() => {
+    if (undoStack.current.length === 0) return;
+    const prev = undoStack.current.pop()!;
+    setConfig((current) => {
+      if (current) redoStack.current.push(current);
+      setCanUndo(undoStack.current.length > 0);
+      setCanRedo(true);
+      return prev;
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    if (redoStack.current.length === 0) return;
+    const next = redoStack.current.pop()!;
+    setConfig((current) => {
+      if (current) undoStack.current.push(current);
+      setCanUndo(true);
+      setCanRedo(redoStack.current.length > 0);
+      return next;
+    });
+  }, []);
+
+  const fetchDiagrams = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/diagrams`);
+      if (res.ok) {
+        const list = await res.json();
+        setDiagrams(list);
+        return list as DiagramInfo[];
+      }
+    } catch {
+      // API not available — use legacy single-file mode
+    }
+    return [];
+  }, []);
+
+  const fetchConfig = useCallback(async (diagramId?: string) => {
+    const id = diagramId ?? currentDiagramId;
     setIsLoading(true);
     setError(null);
     try {
@@ -70,16 +156,24 @@ export function useArchitectureData(): UseArchitectureDataResult {
 
       let raw: unknown;
       try {
-        raw = await tryFetch('/architecture.json');
+        raw = await tryFetch(`${API_BASE}/diagrams/${id}`);
       } catch {
         try {
-          raw = await tryFetch(`${API_BASE}/architecture`);
-        } catch (apiErr) {
-          throw apiErr;
+          raw = await tryFetch('/architecture.json');
+        } catch {
+          try {
+            raw = await tryFetch(`${API_BASE}/architecture`);
+          } catch (apiErr) {
+            throw apiErr;
+          }
         }
       }
       const parsed = ConfigSchema.parse(raw);
       setConfig(parsed);
+      undoStack.current = [];
+      redoStack.current = [];
+      setCanUndo(false);
+      setCanRedo(false);
     } catch (e) {
       const msg = e instanceof z.ZodError
         ? `Invalid config: ${e.errors.map((err) => err.message).join(', ')}`
@@ -91,30 +185,81 @@ export function useArchitectureData(): UseArchitectureDataResult {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentDiagramId]);
 
   useEffect(() => {
+    void fetchDiagrams();
     void fetchConfig();
+  }, [fetchConfig, fetchDiagrams]);
+
+  const switchDiagram = useCallback((id: string) => {
+    setCurrentDiagramId(id);
+    void fetchConfig(id);
   }, [fetchConfig]);
 
+  const createDiagram = useCallback(async (id: string, title: string) => {
+    const newConfig: ArchitectureConfig = { title, nodes: [], edges: [] };
+    try {
+      await fetch(`${API_BASE}/diagrams/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig),
+      });
+      await fetchDiagrams();
+      switchDiagram(id);
+    } catch {
+      // Silently fail — user can retry
+    }
+  }, [fetchDiagrams, switchDiagram]);
+
+  const duplicateDiagram = useCallback(async (fromId: string, newId: string, newTitle: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/diagrams/${fromId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      data.title = newTitle;
+      await fetch(`${API_BASE}/diagrams/${newId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      await fetchDiagrams();
+      switchDiagram(newId);
+    } catch {
+      // Silently fail
+    }
+  }, [fetchDiagrams, switchDiagram]);
+
+  const deleteDiagram = useCallback(async (id: string) => {
+    try {
+      await fetch(`${API_BASE}/diagrams/${id}`, { method: 'DELETE' });
+      const remaining = await fetchDiagrams();
+      if (id === currentDiagramId && remaining.length > 0) {
+        switchDiagram(remaining[0].id);
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [currentDiagramId, fetchDiagrams, switchDiagram]);
+
   const setTitle = useCallback((title: string) => {
-    setConfig((c) => (c ? { ...c, title } : null));
-  }, []);
+    setConfigWithHistory((c) => (c ? { ...c, title } : null));
+  }, [setConfigWithHistory]);
 
   const setSubtitle = useCallback((subtitle: string) => {
-    setConfig((c) => (c ? { ...c, subtitle } : null));
-  }, []);
+    setConfigWithHistory((c) => (c ? { ...c, subtitle } : null));
+  }, [setConfigWithHistory]);
 
   const addNode = useCallback((node: ArchitectureNode) => {
-    setConfig((c) => {
+    setConfigWithHistory((c) => {
       if (!c) return c;
       if (c.nodes.some((n) => n.id === node.id)) return c;
       return { ...c, nodes: [...c.nodes, node] };
     });
-  }, []);
+  }, [setConfigWithHistory]);
 
   const updateNode = useCallback((oldId: string, updates: Partial<ArchitectureNode>) => {
-    setConfig((c) => {
+    setConfigWithHistory((c) => {
       if (!c) return c;
       const newId = updates.id ?? oldId;
       const nodes = c.nodes.map((n) =>
@@ -127,10 +272,10 @@ export function useArchitectureData(): UseArchitectureDataResult {
       }));
       return { ...c, nodes, edges };
     });
-  }, []);
+  }, [setConfigWithHistory]);
 
   const deleteNode = useCallback((id: string) => {
-    setConfig((c) => {
+    setConfigWithHistory((c) => {
       if (!c) return c;
       return {
         ...c,
@@ -138,10 +283,10 @@ export function useArchitectureData(): UseArchitectureDataResult {
         edges: c.edges.filter((e) => e.source !== id && e.target !== id),
       };
     });
-  }, []);
+  }, [setConfigWithHistory]);
 
   const addEdge = useCallback((edge: ArchitectureEdge) => {
-    setConfig((c) => {
+    setConfigWithHistory((c) => {
       if (!c) return c;
       const exists = c.edges.some(
         (e) => e.source === edge.source && e.target === edge.target
@@ -149,34 +294,49 @@ export function useArchitectureData(): UseArchitectureDataResult {
       if (exists) return c;
       return { ...c, edges: [...c.edges, edge] };
     });
-  }, []);
+  }, [setConfigWithHistory]);
+
+  const updateEdgeByIndex = useCallback((index: number, updates: Partial<ArchitectureEdge>) => {
+    setConfigWithHistory((c) => {
+      if (!c || index < 0 || index >= c.edges.length) return c;
+      const edges = c.edges.map((e, i) => (i === index ? { ...e, ...updates } : e));
+      return { ...c, edges };
+    });
+  }, [setConfigWithHistory]);
+
+  const deleteEdgeByIndex = useCallback((index: number) => {
+    setConfigWithHistory((c) => {
+      if (!c || index < 0 || index >= c.edges.length) return c;
+      return { ...c, edges: c.edges.filter((_, i) => i !== index) };
+    });
+  }, [setConfigWithHistory]);
 
   const deleteEdge = useCallback((source: string, target: string) => {
-    setConfig((c) => {
+    setConfigWithHistory((c) => {
       if (!c) return c;
       const idx = c.edges.findIndex((e) => e.source === source && e.target === target);
       if (idx < 0) return c;
       const edges = c.edges.filter((_, i) => i !== idx);
       return { ...c, edges };
     });
-  }, []);
+  }, [setConfigWithHistory]);
 
   const deleteEdgeById = useCallback((edgeId: string) => {
     const match = edgeId.match(/^edge-(\d+)$/);
     if (!match) return;
     const idx = parseInt(match[1] ?? '-1', 10);
-    setConfig((c) => {
+    setConfigWithHistory((c) => {
       if (!c || idx < 0 || idx >= c.edges.length) return c;
       const edges = c.edges.filter((_, i) => i !== idx);
       return { ...c, edges };
     });
-  }, []);
+  }, [setConfigWithHistory]);
 
   const save = useCallback(async (): Promise<boolean> => {
     if (!config) return false;
     setSaveError(null);
     try {
-      const res = await fetch(`${API_BASE}/architecture`, {
+      const res = await fetch(`${API_BASE}/diagrams/${currentDiagramId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
@@ -191,6 +351,7 @@ export function useArchitectureData(): UseArchitectureDataResult {
         }
         throw new Error(statusMsg);
       }
+      void fetchDiagrams();
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to save';
@@ -205,7 +366,7 @@ export function useArchitectureData(): UseArchitectureDataResult {
       setSaveError(finalMsg);
       return false;
     }
-  }, [config]);
+  }, [config, currentDiagramId, fetchDiagrams]);
 
   const downloadJson = useCallback(() => {
     if (!config) return;
@@ -220,27 +381,39 @@ export function useArchitectureData(): UseArchitectureDataResult {
     URL.revokeObjectURL(url);
   }, [config]);
 
-  const { nodes, edges } = config ? transformConfig(config) : { nodes: [], edges: [] };
+  const { nodes, edges: xyEdges } = config ? transformConfig(config) : { nodes: [] as Node<ArchitectureNodeData>[], edges: [] as Edge[] };
 
   return {
     title: config?.title ?? '',
     subtitle: config?.subtitle,
     nodes,
-    edges,
+    edges: xyEdges,
     config,
     isLoading,
     error,
     saveError,
+    canUndo,
+    canRedo,
+    currentDiagramId,
+    diagrams,
+    switchDiagram,
+    createDiagram,
+    duplicateDiagram,
+    deleteDiagram,
     refetch: fetchConfig,
     setTitle,
     setSubtitle,
     addNode,
     updateNode,
     deleteNode,
-  addEdge,
-  deleteEdge,
-  deleteEdgeById,
-  save,
+    addEdge,
+    updateEdgeByIndex,
+    deleteEdgeByIndex,
+    deleteEdge,
+    deleteEdgeById,
+    undo,
+    redo,
+    save,
     downloadJson,
   };
 }

@@ -10,6 +10,7 @@ interface AddNodeModalProps {
 }
 
 const NODE_TYPES: { value: NodeType; label: string }[] = [
+  { value: 'ui', label: 'UI' },
   { value: 'service', label: 'Service' },
   { value: 'database', label: 'Database' },
   { value: 'queue', label: 'Queue / Cache' },
