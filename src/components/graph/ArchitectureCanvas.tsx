@@ -12,6 +12,7 @@ import {
   type Node,
   type Edge,
   type NodeChange,
+  type Connection,
 } from '@xyflow/react';
 import { toPng } from 'html-to-image';
 import { DeleteSelectedPanel } from './DeleteSelectedPanel';
@@ -19,7 +20,7 @@ import '@xyflow/react/dist/style.css';
 import { motion } from 'framer-motion';
 import { nodeTypes } from './nodeTypes';
 import { AnimatedFlowEdge } from './AnimatedFlowEdge';
-import { useLayout } from '../../hooks/useLayout';
+import { useLayout, type LayoutDirection } from '../../hooks/useLayout';
 import type { ArchitectureNodeData } from '../../utils/transformConfig';
 
 const edgeTypes = {
@@ -48,6 +49,9 @@ interface ArchitectureCanvasProps {
   onNodesDelete?: (nodeIds: string[]) => void;
   onEdgesDelete?: (edgeIds: string[]) => void;
   onExportPng?: (fn: () => void) => void;
+  onNodePositionChange?: (id: string, x: number, y: number) => void;
+  onEdgeConnect?: (source: string, target: string) => void;
+  layoutDirection?: LayoutDirection;
 }
 
 /** Get immediate neighbor node IDs for a given node */
@@ -174,6 +178,9 @@ function ArchitectureCanvasInner({
   onNodesDelete,
   onEdgesDelete,
   onExportPng,
+  onNodePositionChange,
+  onEdgeConnect,
+  layoutDirection = 'TB',
 }: ArchitectureCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -222,21 +229,37 @@ function ArchitectureCanvasInner({
   // Track manually dragged node positions so dagre doesn't override them
   const draggedPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-  // Layout on data change — spread nodes across available space, preserve dragged positions
+  // Layout on data change — spread nodes across available space, preserve dragged/saved positions
   useEffect(() => {
-    const { nodes: ln, edges: le } = getLayoutedElements(initialNodes, initialEdges, {
+    // Nodes with saved positions skip dagre entirely; only layout the rest
+    const savedIds = new Set(
+      initialNodes
+        .filter((n) => (n.data as ArchitectureNodeData & { hasSavedPosition?: boolean }).hasSavedPosition)
+        .map((n) => n.id)
+    );
+
+    const nodesForLayout = savedIds.size > 0
+      ? initialNodes.filter((n) => !savedIds.has(n.id))
+      : initialNodes;
+
+    const { nodes: ln, edges: le } = getLayoutedElements(nodesForLayout, initialEdges, {
       width: containerSize.width,
       height: containerSize.height,
+      direction: layoutDirection,
     });
 
     const curvedEdges = applyEdgeCurvature(le);
 
-    const mergedNodes = ln.map((n) => {
+    // Merge: dagre-positioned nodes + saved-position nodes
+    const layoutMap = new Map(ln.map((n) => [n.id, n]));
+    const mergedNodes = initialNodes.map((n) => {
+      // Dragged this session (highest priority)
       const dragged = draggedPositions.current.get(n.id);
-      if (dragged) {
-        return { ...n, position: dragged };
-      }
-      return n;
+      if (dragged) return { ...n, position: dragged };
+      // Saved position from JSON
+      if (savedIds.has(n.id)) return n;
+      // Dagre layout
+      return layoutMap.get(n.id) ?? n;
     });
 
     setNodes(mergedNodes);
@@ -246,7 +269,7 @@ function ArchitectureCanvasInner({
     requestAnimationFrame(() => {
       setTimeout(() => fitView({ padding: 0.12, duration: 300 }), 50);
     });
-  }, [initialNodes, initialEdges, containerSize, getLayoutedElements, setNodes, setEdges, fitView]);
+  }, [initialNodes, initialEdges, containerSize, layoutDirection, getLayoutedElements, setNodes, setEdges, fitView]);
 
   // Compute highlight sets — use initialEdges (topology) to avoid infinite loop
   const highlightResult = useMemo(() => {
@@ -358,6 +381,15 @@ function ArchitectureCanvasInner({
     );
   }, [highlightResult, showFlow, showLabels, setEdges]);
 
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      if (connection.source && connection.target) {
+        onEdgeConnect?.(connection.source, connection.target);
+      }
+    },
+    [onEdgeConnect]
+  );
+
   const onInit = useCallback(
     (instance: { fitView: (opts?: { padding?: number; duration?: number }) => void }) => {
       setTimeout(() => instance.fitView({ padding: 0.2, duration: 400 }), 100);
@@ -398,17 +430,18 @@ function ArchitectureCanvasInner({
       if (removes.length > 0 && onNodesDelete) {
         const ids = removes.map((c) => (c as { id: string }).id).filter(Boolean);
         onNodesDelete(ids);
-        // Also clean up dragged positions for removed nodes
+          // Clean up dragged positions for removed nodes
         ids.forEach((id) => draggedPositions.current.delete(id));
         const other = changes.filter((c) => c.type !== 'remove');
         if (other.length > 0) onNodesChange(other);
         return;
       }
 
-      // Persist position on drag
+      // Persist position on drag end
       for (const change of changes) {
         if (change.type === 'position' && change.position && change.dragging === false) {
           draggedPositions.current.set(change.id, { ...change.position });
+          onNodePositionChange?.(change.id, change.position.x, change.position.y);
         }
       }
 
@@ -449,6 +482,7 @@ function ArchitectureCanvasInner({
         onNodeDoubleClick={(_e, node) => onNodeDoubleClick?.(node.id)}
         onEdgeDoubleClick={(_e, edge) => onEdgeDoubleClick?.(edge.id)}
         onPaneClick={handlePaneClick}
+        onConnect={handleConnect}
         onInit={onInit}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}

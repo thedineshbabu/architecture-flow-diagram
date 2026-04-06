@@ -9,6 +9,8 @@ export interface ArchitectureNode {
   label: string;
   type: NodeType;
   description?: string;
+  x?: number;
+  y?: number;
 }
 
 export interface ArchitectureEdge {

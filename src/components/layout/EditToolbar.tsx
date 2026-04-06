@@ -1,10 +1,13 @@
 import { motion } from 'framer-motion';
+import { useRef } from 'react';
+import type { LayoutDirection } from '../../hooks/useLayout';
 
 interface EditToolbarProps {
   onAddNode: () => void;
   onAddEdge: () => void;
   onSave: () => void;
   onDownload: () => void;
+  onImport?: (config: unknown) => void;
   onExportPng?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
@@ -13,11 +16,16 @@ interface EditToolbarProps {
   onToggleFullscreen?: () => void;
   onToggleFlow?: () => void;
   onToggleLabels?: () => void;
+  layoutDirection?: LayoutDirection;
+  onLayoutDirectionChange?: (dir: LayoutDirection) => void;
   isFullscreen?: boolean;
   isFlowActive?: boolean;
   showLabels?: boolean;
   isSaving?: boolean;
   saveError: string | null;
+  autoSave?: boolean;
+  onToggleAutoSave?: () => void;
+  lastSavedAt?: Date | null;
 }
 
 export function EditToolbar({
@@ -25,6 +33,7 @@ export function EditToolbar({
   onAddEdge,
   onSave,
   onDownload,
+  onImport,
   onExportPng,
   onUndo,
   onRedo,
@@ -33,12 +42,18 @@ export function EditToolbar({
   onToggleFullscreen,
   onToggleFlow,
   onToggleLabels,
+  layoutDirection = 'TB',
+  onLayoutDirectionChange,
   isFullscreen = false,
   isFlowActive = false,
   showLabels = false,
   isSaving = false,
   saveError,
+  autoSave = false,
+  onToggleAutoSave,
+  lastSavedAt,
 }: EditToolbarProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const btnClass = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 backdrop-blur-md border border-slate-600 hover:border-slate-500 text-slate-200 text-sm font-medium transition-colors';
   const btnDisabled = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/90 backdrop-blur-md border border-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed';
 
@@ -118,6 +133,24 @@ export function EditToolbar({
           </>
         )}
       </button>
+      {onToggleAutoSave && (
+        <button
+          onClick={onToggleAutoSave}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-md border text-sm font-medium transition-colors ${
+            autoSave
+              ? 'bg-emerald-900/30 border-emerald-500/50 text-emerald-400'
+              : 'bg-slate-800/90 border-slate-600 hover:border-slate-500 text-slate-400'
+          }`}
+          title={autoSave ? 'Auto-save on (click to disable)' : 'Auto-save off (click to enable)'}
+        >
+          <svg className={`w-4 h-4 ${autoSave ? 'animate-pulse' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {autoSave && lastSavedAt
+            ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : 'Auto'}
+        </button>
+      )}
       <button
         onClick={onDownload}
         className={btnClass}
@@ -127,6 +160,42 @@ export function EditToolbar({
         </svg>
         Download
       </button>
+      {onImport && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                try {
+                  const parsed = JSON.parse(ev.target?.result as string);
+                  onImport(parsed);
+                } catch {
+                  alert('Invalid JSON file');
+                }
+              };
+              reader.readAsText(file);
+              // Reset so the same file can be re-imported
+              e.target.value = '';
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className={btnClass}
+            title="Import JSON"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Import
+          </button>
+        </>
+      )}
       {onExportPng && (
         <button
           onClick={onExportPng}
@@ -159,6 +228,29 @@ export function EditToolbar({
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
           </svg>
           Labels
+        </button>
+      )}
+
+      {onLayoutDirectionChange && (
+        <button
+          onClick={() => {
+            const dirs: LayoutDirection[] = ['TB', 'LR', 'BT', 'RL'];
+            const next = dirs[(dirs.indexOf(layoutDirection) + 1) % dirs.length];
+            onLayoutDirectionChange(next);
+          }}
+          className={btnClass}
+          title={`Layout direction: ${layoutDirection} (click to cycle)`}
+        >
+          {layoutDirection === 'TB' || layoutDirection === 'BT' ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 7h18M3 12h18M3 17h18" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v18M12 3v18M17 3v18" />
+            </svg>
+          )}
+          {layoutDirection}
         </button>
       )}
 

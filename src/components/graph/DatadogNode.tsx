@@ -59,13 +59,22 @@ function DatadogNodeComponent({ data, selected }: NodeProps<ArchitectureNodeData
     return () => window.removeEventListener('mousemove', handler);
   }, [isHovered]);
 
+  const handleStyle = (visible: boolean): React.CSSProperties => ({
+    width: 10,
+    height: 10,
+    background: visible ? style.ring : 'transparent',
+    border: visible ? `2px solid #0d0d1a` : 'none',
+    borderRadius: '50%',
+    opacity: visible ? 0.9 : 0,
+    transition: 'opacity 0.15s ease, background 0.15s ease',
+    zIndex: 10,
+  });
+
   return (
     <>
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="!w-1.5 !h-1.5 !border-0 !bg-transparent"
-      />
+      <Handle type="target" position={Position.Top} style={handleStyle(isHovered)} />
+      <Handle type="target" position={Position.Left} style={handleStyle(isHovered)} />
+      <Handle type="source" position={Position.Right} style={handleStyle(isHovered)} />
 
       <div
         ref={nodeRef}
@@ -153,11 +162,7 @@ function DatadogNodeComponent({ data, selected }: NodeProps<ArchitectureNodeData
         )}
       </div>
 
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="!w-1.5 !h-1.5 !border-0 !bg-transparent"
-      />
+      <Handle type="source" position={Position.Bottom} style={handleStyle(isHovered)} />
     </>
   );
 }

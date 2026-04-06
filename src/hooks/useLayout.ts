@@ -2,9 +2,12 @@ import { useCallback } from 'react';
 import dagre from 'dagre';
 import type { Node, Edge } from '@xyflow/react';
 
+export type LayoutDirection = 'TB' | 'LR' | 'BT' | 'RL';
+
 export interface LayoutOptions {
   width?: number;
   height?: number;
+  direction?: LayoutDirection;
 }
 
 const NODE_WIDTH = 140;
@@ -32,11 +35,14 @@ export function useLayout() {
       const nodesep = Math.max(60, Math.floor((availW - estimatedPerRank * NODE_WIDTH) / Math.max(1, estimatedPerRank - 1)));
       const ranksep = Math.max(80, Math.floor((availH - estimatedRanks * NODE_HEIGHT) / Math.max(1, estimatedRanks)));
 
+      const direction = options?.direction ?? 'TB';
+      const isHorizontal = direction === 'LR' || direction === 'RL';
+
       const g = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
       g.setGraph({
-        rankdir: 'TB',
-        nodesep: Math.min(nodesep, 200),
-        ranksep: Math.min(ranksep, 200),
+        rankdir: direction,
+        nodesep: Math.min(isHorizontal ? ranksep : nodesep, 200),
+        ranksep: Math.min(isHorizontal ? nodesep : ranksep, 200),
         marginx: 40,
         marginy: 40,
       });

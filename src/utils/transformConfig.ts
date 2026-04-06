@@ -10,11 +10,13 @@ export function transformConfig(config: ArchitectureConfig): {
   const nodes: Node<ArchitectureNodeData>[] = config.nodes.map((n) => ({
     id: n.id,
     type: n.type,
-    position: { x: 0, y: 0 },
+    // Use saved position if available; dagre will override only if position is absent (x/y undefined)
+    position: n.x != null && n.y != null ? { x: n.x, y: n.y } : { x: 0, y: 0 },
     data: {
       label: n.label,
       type: n.type,
       description: n.description,
+      hasSavedPosition: n.x != null && n.y != null,
     },
   }));
 

@@ -20,23 +20,25 @@ No test framework is configured.
 
 **Frontend (React 19 + TypeScript + Vite):**
 - `src/App.tsx` — top-level component, wires together modals and canvas
-- `src/hooks/useArchitectureData.ts` — central state hook: fetches config, manages CRUD for nodes/edges, saves via API, validates with Zod
+- `src/hooks/useArchitectureData.ts` — central state hook: fetches config, manages CRUD for nodes/edges/diagrams, undo/redo (50-step history), saves via API, validates with Zod
 - `src/utils/transformConfig.ts` — converts `ArchitectureConfig` into `@xyflow/react` `Node[]`/`Edge[]`
-- `src/components/graph/` — custom xyflow node types (`ServiceNode`, `DatabaseNode`, `QueueNode`) and `AnimatedFlowEdge`, registered in `nodeTypes.ts`
-- `src/components/ui/` — modals for add/edit/delete operations
-- `src/components/layout/` — Header, Legend, EditToolbar
-- `src/types/architecture.ts` — core types (`ArchitectureNode`, `ArchitectureEdge`, `ArchitectureConfig`) and xyflow node data types
+- `src/components/graph/` — custom xyflow node types (`ServiceNode`, `DatabaseNode`, `QueueNode`, `DatadogNode`), `AnimatedFlowEdge`, `DeleteSelectedPanel`, registered in `nodeTypes.ts`
+- `src/components/ui/` — modals for add/edit/delete operations on nodes and edges
+- `src/components/layout/` — Header, Legend, EditToolbar, `DiagramSwitcher` (create/duplicate/delete diagrams), `SearchBar`
+- `src/types/architecture.ts` — core types (`ArchitectureNode`, `ArchitectureEdge`, `ArchitectureConfig`) and xyflow node data types; `NodeType` includes `'ui' | 'service' | 'database' | 'queue'`
 
 **Backend (`server.mjs` — Express, port 3001):**
-- `GET /api/architecture` — reads `public/architecture.json`
-- `PUT /api/architecture` — writes `public/architecture.json`
+- `GET /api/diagrams` — lists all diagrams; `GET /api/diagrams/:id` — reads `public/diagrams/{id}.json`
+- `PUT /api/diagrams/:id` — writes diagram; `DELETE /api/diagrams/:id` — deletes diagram
+- Legacy `GET|PUT /api/architecture` endpoints redirect to `diagrams/default.json`; `public/architecture.json` is auto-migrated to `public/diagrams/default.json` on first start
 - In production build, also serves `dist/` as static files
 
-**Data flow:** `public/architecture.json` → Zod validation → `useArchitectureData` state → `transformConfig` → xyflow nodes/edges → `ArchitectureCanvas`. Edits modify hook state; "Save to JSON" PUTs back to API; "Download" exports client-side.
+**Data flow:** `public/diagrams/{id}.json` → Zod validation → `useArchitectureData` state → `transformConfig` → xyflow nodes/edges → `ArchitectureCanvas`. Edits modify hook state; "Save to JSON" PUTs back to API; "Download" exports client-side.
 
 ## Key Patterns
 
 - Layout is computed by dagre (`src/hooks/useLayout.ts`) — nodes get `position: {x:0, y:0}` from transform, then dagre assigns real positions
-- Edge IDs follow `edge-{index}` convention (index into config.edges array) — `deleteEdgeById` depends on this
+- Edge IDs follow `edge-{index}` convention (index into config.edges array) — both `deleteEdgeById` and `deleteEdgeByIndex` depend on this mapping
+- Undo/redo history is capped at 50 steps; every `setConfig` call that changes state pushes to `undoStack` and clears `redoStack`
 - The frontend tries fetching `/architecture.json` (Vite static) first, falls back to `/api/architecture`
 - Tailwind CSS with a dark slate/navy theme throughout

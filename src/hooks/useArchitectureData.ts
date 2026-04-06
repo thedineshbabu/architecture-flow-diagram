@@ -9,6 +9,8 @@ const NodeSchema = z.object({
   label: z.string(),
   type: z.enum(['ui', 'service', 'database', 'queue']),
   description: z.string().optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
 });
 
 const EdgeSchema = z.object({
@@ -47,6 +49,9 @@ export interface UseArchitectureDataResult {
   saveError: string | null;
   canUndo: boolean;
   canRedo: boolean;
+  autoSave: boolean;
+  setAutoSave: (on: boolean) => void;
+  lastSavedAt: Date | null;
   currentDiagramId: string;
   diagrams: DiagramInfo[];
   switchDiagram: (id: string) => void;
@@ -58,6 +63,7 @@ export interface UseArchitectureDataResult {
   setSubtitle: (subtitle: string) => void;
   addNode: (node: ArchitectureNode) => void;
   updateNode: (id: string, updates: Partial<ArchitectureNode>) => void;
+  updateNodePosition: (id: string, x: number, y: number) => void;
   deleteNode: (id: string) => void;
   addEdge: (edge: ArchitectureEdge) => void;
   updateEdgeByIndex: (index: number, updates: Partial<ArchitectureEdge>) => void;
@@ -68,6 +74,7 @@ export interface UseArchitectureDataResult {
   redo: () => void;
   save: () => Promise<boolean>;
   downloadJson: () => void;
+  importConfig: (raw: unknown) => boolean;
 }
 
 const API_BASE = '/api';
@@ -79,6 +86,9 @@ export function useArchitectureData(): UseArchitectureDataResult {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [currentDiagramId, setCurrentDiagramId] = useState('default');
   const [diagrams, setDiagrams] = useState<DiagramInfo[]>([]);
+  const [autoSave, setAutoSave] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Undo/redo history
   const undoStack = useRef<ArchitectureConfig[]>([]);
@@ -126,6 +136,34 @@ export function useArchitectureData(): UseArchitectureDataResult {
       return next;
     });
   }, []);
+
+  // Auto-save: debounce 2s after any config change when autoSave is enabled
+  const currentDiagramIdRef = useRef(currentDiagramId);
+  currentDiagramIdRef.current = currentDiagramId;
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  useEffect(() => {
+    if (!autoSave || !config || isLoading) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(async () => {
+      const c = configRef.current;
+      if (!c) return;
+      try {
+        const res = await fetch(`${API_BASE}/diagrams/${currentDiagramIdRef.current}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(c),
+        });
+        if (res.ok) setLastSavedAt(new Date());
+      } catch {
+        // Silently ignore auto-save failures
+      }
+    }, 2000);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [config, autoSave, isLoading]);
 
   const fetchDiagrams = useCallback(async () => {
     try {
@@ -285,6 +323,18 @@ export function useArchitectureData(): UseArchitectureDataResult {
     });
   }, [setConfigWithHistory]);
 
+  // updateNodePosition deliberately skips undo history — position drags are
+  // frequent and low-stakes; they'd flood the undo stack.
+  const updateNodePosition = useCallback((id: string, x: number, y: number) => {
+    setConfig((c) => {
+      if (!c) return c;
+      return {
+        ...c,
+        nodes: c.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)),
+      };
+    });
+  }, []);
+
   const addEdge = useCallback((edge: ArchitectureEdge) => {
     setConfigWithHistory((c) => {
       if (!c) return c;
@@ -351,6 +401,7 @@ export function useArchitectureData(): UseArchitectureDataResult {
         }
         throw new Error(statusMsg);
       }
+      setLastSavedAt(new Date());
       void fetchDiagrams();
       return true;
     } catch (e) {
@@ -367,6 +418,13 @@ export function useArchitectureData(): UseArchitectureDataResult {
       return false;
     }
   }, [config, currentDiagramId, fetchDiagrams]);
+
+  const importConfig = useCallback((raw: unknown): boolean => {
+    const result = ConfigSchema.safeParse(raw);
+    if (!result.success) return false;
+    setConfigWithHistory(() => result.data);
+    return true;
+  }, [setConfigWithHistory]);
 
   const downloadJson = useCallback(() => {
     if (!config) return;
@@ -405,6 +463,7 @@ export function useArchitectureData(): UseArchitectureDataResult {
     setSubtitle,
     addNode,
     updateNode,
+    updateNodePosition,
     deleteNode,
     addEdge,
     updateEdgeByIndex,
@@ -413,7 +472,11 @@ export function useArchitectureData(): UseArchitectureDataResult {
     deleteEdgeById,
     undo,
     redo,
+    autoSave,
+    setAutoSave,
+    lastSavedAt,
     save,
     downloadJson,
+    importConfig,
   };
 }

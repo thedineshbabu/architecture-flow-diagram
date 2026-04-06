@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useArchitectureData } from './hooks/useArchitectureData';
+import type { LayoutDirection } from './hooks/useLayout';
 import { SearchBar } from './components/layout/SearchBar';
 import { Header } from './components/layout/Header';
 import { Legend } from './components/layout/Legend';
@@ -26,6 +27,7 @@ function App() {
     refetch,
     addNode,
     updateNode,
+    updateNodePosition,
     deleteNode,
     addEdge,
     updateEdgeByIndex,
@@ -41,8 +43,14 @@ function App() {
     createDiagram,
     duplicateDiagram,
     deleteDiagram,
+    setTitle,
+    setSubtitle,
+    autoSave,
+    setAutoSave,
+    lastSavedAt,
     save,
     downloadJson,
+    importConfig,
   } = useArchitectureData();
 
   const [isAddNodeOpen, setIsAddNodeOpen] = useState(false);
@@ -51,6 +59,7 @@ function App() {
   const [editEdge, setEditEdge] = useState<(ArchitectureEdge & { index: number }) | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isFlowActive, setIsFlowActive] = useState(false);
+  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>('TB');
   const [showLabels, setShowLabels] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
@@ -138,6 +147,13 @@ function App() {
     [deleteEdgeById]
   );
 
+  const handleEdgeConnect = useCallback(
+    (source: string, target: string) => {
+      addEdge({ source, target, flowDirection: 'unidirectional' });
+    },
+    [addEdge]
+  );
+
   const nodeOptions = (config?.nodes ?? []).map((n) => ({ id: n.id, label: n.label }));
   const existingIds = (config?.nodes ?? []).map((n) => n.id);
 
@@ -172,7 +188,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col">
       <div className="flex items-center justify-between px-4">
-        <Header title={title} subtitle={subtitle} />
+        <Header title={title} subtitle={subtitle} onTitleChange={setTitle} onSubtitleChange={setSubtitle} />
         <DiagramSwitcher
           diagrams={diagrams}
           currentId={currentDiagramId}
@@ -200,6 +216,7 @@ function App() {
               onAddEdge={() => setIsAddEdgeOpen(true)}
               onSave={handleSave}
               onDownload={downloadJson}
+              onImport={(raw) => { if (!importConfig(raw)) alert('Invalid architecture JSON — must have title, nodes[], and edges[].'); }}
               onExportPng={() => exportPngRef.current?.()}
               onUndo={undo}
               onRedo={redo}
@@ -207,6 +224,11 @@ function App() {
               canRedo={canRedo}
               onToggleLabels={() => setShowLabels((v) => !v)}
               showLabels={showLabels}
+              layoutDirection={layoutDirection}
+              onLayoutDirectionChange={setLayoutDirection}
+              autoSave={autoSave}
+              onToggleAutoSave={() => setAutoSave(!autoSave)}
+              lastSavedAt={lastSavedAt}
               onToggleFlow={() => setIsFlowActive((v) => !v)}
               isFlowActive={isFlowActive}
               onToggleFullscreen={handleToggleFullscreen}
@@ -250,6 +272,9 @@ function App() {
             onNodesDelete={handleNodesDelete}
             onEdgesDelete={handleEdgesDelete}
             onExportPng={(fn) => { exportPngRef.current = fn; }}
+            onNodePositionChange={updateNodePosition}
+            onEdgeConnect={handleEdgeConnect}
+            layoutDirection={layoutDirection}
           />
         </div>
       </main>
